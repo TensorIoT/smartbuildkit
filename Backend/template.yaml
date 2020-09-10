@@ -1,0 +1,692 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Specification template describing your function.
+Globals:
+  Function:
+    Runtime: python3.8
+    MemorySize: 128
+    Timeout: 900
+    Environment:
+      Variables:
+        SBKDeviceListTableName:
+          Ref: SBKDeviceListTable
+        SBKDeviceDataTableName:
+          Ref: SBKDeviceDataTable
+        SBKHourlyDeviceDataTableName:
+          Ref: SBKHourlyDeviceDataTable
+        SBKDailyDeviceDataTableName:
+          Ref: SBKDailyDeviceDataTable
+        SBKMapS3BucketName:
+          Ref: MapsS3Bucket
+        SBKUserListTableName:
+          Ref: SBKUsersTable
+
+Parameters: 
+  CognitoUserPoolId: 
+    Type: String
+    Description: Enter cognito user pool id.
+
+Resources:
+
+  SBKCommonLambdaRole: 
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: MapsS3Bucket
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+              'Fn::GetAtt':
+                - MapsS3Bucket
+                - Arn      
+      - PolicyName: SBKUsersTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              'Fn::GetAtt':
+                - SBKUsersTable
+                - Arn
+      - PolicyName: SBKUsersTableIndex
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              !Join
+                - '/'
+                - - 'Fn::GetAtt':
+                      - SBKUsersTable
+                      - Arn
+                  - 'index'
+                  - '*'
+      - PolicyName: SBKDailyDeviceDataTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              'Fn::GetAtt':
+                - SBKDailyDeviceDataTable
+                - Arn
+      - PolicyName: SBKDailyDeviceDataTableIndex
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              !Join
+                - '/'
+                - - 'Fn::GetAtt':
+                      - SBKDailyDeviceDataTable
+                      - Arn
+                  - 'index'
+                  - '*'         
+      - PolicyName: SBKDeviceListTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              'Fn::GetAtt':
+                - SBKDeviceListTable
+                - Arn
+      - PolicyName: SBKDeviceListTableIndex
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              !Join
+                - '/'
+                - - 'Fn::GetAtt':
+                      - SBKDeviceListTable
+                      - Arn
+                  - 'index'
+                  - '*'            
+      - PolicyName: SBKDeviceDataTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              'Fn::GetAtt':
+                - SBKDeviceDataTable
+                - Arn
+      - PolicyName: SBKDeviceDataTableIndex
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              !Join
+                - '/'
+                - - 'Fn::GetAtt':
+                      - SBKDeviceDataTable
+                      - Arn
+                  - 'index'
+                  - '*'                
+      - PolicyName: SBKHourlyDeviceDataTableIndex
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              !Join
+                - '/'
+                - - 'Fn::GetAtt':
+                      - SBKHourlyDeviceDataTable
+                      - Arn
+                  - 'index'
+                  - '*'                    
+                                 
+      - PolicyName: SBKHourlyDeviceDataTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:*
+            Resource:
+              'Fn::GetAtt':
+                - SBKHourlyDeviceDataTable
+                - Arn
+      - PolicyName: IoTDescribeRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - iot:DescribeThing
+            Resource: '*'                                                            
+      ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+          - arn:aws:iam::aws:policy/AdministratorAccess
+
+  MapsS3Bucket:
+    Type: AWS::S3::Bucket
+  SBKUsersTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: USERID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: USERID
+          KeyType: HASH
+  SBKDeviceListTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DEVEUI
+          AttributeType: S
+        - AttributeName: USERID
+          AttributeType: S
+        - AttributeName: SENSOR_TYPE
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DEVEUI
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: USERID_INDEX
+          KeySchema:
+            - AttributeName: USERID
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: SENSOR_TYPE_INDEX
+          KeySchema:
+            - AttributeName: SENSOR_TYPE
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+  SBKDeviceDataTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DEVEUI
+          AttributeType: S
+        - AttributeName: USERID
+          AttributeType: S
+        - AttributeName: TSTAMP
+          AttributeType: 'N'
+      KeySchema:
+        - AttributeName: DEVEUI
+          KeyType: HASH
+        - AttributeName: TSTAMP
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: USERID_INDEX
+          KeySchema:
+            - AttributeName: USERID
+              KeyType: HASH
+            - AttributeName: TSTAMP
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+  SBKHourlyDeviceDataTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DEVEUI
+          AttributeType: S
+        - AttributeName: USERID
+          AttributeType: S
+        - AttributeName: TSTAMP
+          AttributeType: 'N'
+        - AttributeName: SENSOR_TYPE
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DEVEUI
+          KeyType: HASH
+        - AttributeName: TSTAMP
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: USERID_INDEX
+          KeySchema:
+            - AttributeName: USERID
+              KeyType: HASH
+            - AttributeName: TSTAMP
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: SENSOR_TYPE_INDEX
+          KeySchema:
+            - AttributeName: SENSOR_TYPE
+              KeyType: HASH
+            - AttributeName: TSTAMP
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+  SBKDailyDeviceDataTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DEVEUI
+          AttributeType: S
+        - AttributeName: USERID
+          AttributeType: S
+        - AttributeName: TSTAMP
+          AttributeType: 'N'
+        - AttributeName: SENSOR_TYPE
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DEVEUI
+          KeyType: HASH
+        - AttributeName: TSTAMP
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: USERID_INDEX
+          KeySchema:
+            - AttributeName: USERID
+              KeyType: HASH
+            - AttributeName: TSTAMP
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: SENSOR_TYPE_INDEX
+          KeySchema:
+            - AttributeName: SENSOR_TYPE
+              KeyType: HASH
+            - AttributeName: TSTAMP
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+  SBKDeviceDataRule:
+    Type: 'AWS::IoT::TopicRule'
+    Properties:
+      TopicRulePayload:
+        RuleDisabled: false
+        AwsIotSqlVersion: "2016-03-23"
+        Sql: >-
+          SELECT topic(7) as DevEUI, * FROM
+          'lorawan/parser/tracknet/tabs/smarthome/v10/+/up'
+        Actions:
+          - Lambda:
+              FunctionArn:
+                'Fn::GetAtt':
+                  - SBKInsertDataIntoDB
+                  - Arn
+  LambdaInvocationPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      SourceArn:
+        'Fn::Join':
+          - ''
+          - - 'arn:aws:iot:'
+            - Ref: 'AWS::Region'
+            - ':'
+            - Ref: 'AWS::AccountId'
+            - ':rule/'
+            - Ref: SBKDeviceDataRule
+      Action: 'lambda:InvokeFunction'
+      Principal: iot.amazonaws.com
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKInsertDataIntoDB
+          - Arn
+      SourceAccount:
+        Ref: 'AWS::AccountId'
+  SBKInsertDataIntoDB:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_insert_data_into_db.lambda_handler
+      Description: 'Insert incoming iot data to db'
+      CodeUri: src/SBKInsertDataIntoDB/
+      Role: !GetAtt SBKCommonLambdaRole.Arn      
+
+  SBKRSSIPopulatorDataRule:
+    Type: 'AWS::IoT::TopicRule'
+    Properties:
+      TopicRulePayload:
+        RuleDisabled: false
+        AwsIotSqlVersion: "2016-03-23"
+        Sql: SELECT DevEUI as DEVEUI, get(upinfo, 0).rssi as rssi FROM 'lorawan/device/+/up' where msgtype = 'upinfo' and DevEUI <> '02-00-00-01-00-00-FF-04' and DevEUI <> '02-00-00-01-00-00-FF-05' 
+        Actions:
+          - Lambda:
+              FunctionArn:
+                'Fn::GetAtt':
+                  - SBKRSSIPopulatorLambda
+                  - Arn
+  LambdaInvocationPermissionRssiPopulator:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      SourceArn:
+        'Fn::Join':
+          - ''
+          - - 'arn:aws:iot:'
+            - Ref: 'AWS::Region'
+            - ':'
+            - Ref: 'AWS::AccountId'
+            - ':rule/'
+            - Ref: SBKRSSIPopulatorDataRule
+      Action: 'lambda:InvokeFunction'
+      Principal: iot.amazonaws.com
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKRSSIPopulatorLambda
+          - Arn
+      SourceAccount:
+        Ref: 'AWS::AccountId'
+  SBKRSSIPopulatorLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_rssi_populator.lambda_handler
+      Description: 'Populates the device list table with rssi values'
+      CodeUri: src/SBKRSSIPopulator/
+      Role: !GetAtt SBKCommonLambdaRole.Arn      
+
+
+  SBKGatewayPopulatorDataRule:
+    Type: 'AWS::IoT::TopicRule'
+    Properties:
+      TopicRulePayload:
+        RuleDisabled: false
+        AwsIotSqlVersion: "2016-03-23"
+        Sql: SELECT * FROM 'lorawan/router/+/up' where msgtype = 'stats'
+        Actions:
+          - Lambda:
+              FunctionArn:
+                'Fn::GetAtt':
+                  - SBKGatewayPopulatorLambda
+                  - Arn
+  LambdaInvocationPermissionGatewayPopulator:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      SourceArn:
+        'Fn::Join':
+          - ''
+          - - 'arn:aws:iot:'
+            - Ref: 'AWS::Region'
+            - ':'
+            - Ref: 'AWS::AccountId'
+            - ':rule/'
+            - Ref: SBKGatewayPopulatorDataRule
+      Action: 'lambda:InvokeFunction'
+      Principal: iot.amazonaws.com
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKGatewayPopulatorLambda
+          - Arn
+      SourceAccount:
+        Ref: 'AWS::AccountId'
+  SBKGatewayPopulatorLambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_gateway_populator.lambda_handler
+      Description: 'Populates the device list table with rssi values'
+      CodeUri: src/SBKGatewayPopulator/
+      Role: !GetAtt SBKCommonLambdaRole.Arn  
+
+
+  SBKApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
+      Auth:
+        AddDefaultAuthorizerToCorsPreflight: false
+        DefaultAuthorizer: SBKCognitoAuthorizer
+        Authorizers:
+          SBKCognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolId
+  
+  SBKApiUsagePlan:
+    Type: 'AWS::ApiGateway::UsagePlan'
+    Properties:
+      ApiStages:
+        - ApiId: !Ref SBKApi
+          Stage: Prod
+      Description: SBK usage plan
+      Quota:
+        Limit: 10000
+        Period: DAY
+      Throttle:
+        BurstLimit: 2000
+        RateLimit: 1000
+
+  SBKGetUserDevices:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_get_user_devices.lambda_handler
+      Description: 'Get devices for listing page'
+      CodeUri: src/SBKGetUserDevices/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/devices/getuserdevices
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKGetUserDevicesPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKGetUserDevices
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+  SBKChangeDeviceName:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_change_device_name.lambda_handler
+      Description: 'API to change the device name and location'
+      CodeUri: src/SBKChangeDeviceName/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/devicesettings/changedevicename
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKChangeDeviceNamePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKChangeDeviceName
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+  SBKDeskOccupancyHourProcessor:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_desk_occupancy_hour_processor.lambda_handler
+      Description: 'Runs every hour for calculations of aggregation'
+      CodeUri: src/SBKDeskOccupancyHourProcessor/
+      Events:
+        schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKSecPage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_sec_page.lambda_handler
+      Description: This API Gets all Security page items for door and motion
+      CodeUri: src/SBKSecPage/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/pages/sec
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKSecPagePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKSecPage
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+  SBKEnvPage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_env_page.lambda_handler
+      Description: 'Provide data for Env page'
+      CodeUri: src/SBKEnvPage/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/pages/envpage
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKEnvPagePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKEnvPage
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+  SBKDashboardPage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_dashboard_page.lambda_handler
+      Description: API That serves dashboard page render
+      CodeUri: src/SBKDashboardPage/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/pages/dashboard
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKDashboardPagePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKDashboardPage
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+  SBKSpecsPage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_specs_page.lambda_handler
+      Description: 'Get the data for the specs page'
+      CodeUri: src/SBKSpecsPage/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi
+            Path: /sbk/pages/specs
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKSpecsPagePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKSpecsPage
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'
+
+  SBKMapPage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: sbk_map_page.lambda_handler
+      Description: 'Get data for the map page'
+      CodeUri: src/SBKMapPage/
+      Events:
+        LambdaMicroservice:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SBKApi          
+            Path: /sbk/pages/map
+            Method: POST
+      Role: !GetAtt SBKCommonLambdaRole.Arn
+
+  SBKMapPagePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName:
+        'Fn::GetAtt':
+          - SBKMapPage
+          - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        'Fn::Sub': 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/*/*'        
+
+Outputs:
+  APIGatewayURL:
+    Description: API Gateway URL
+    Value: Value to return
+    Value: !Sub "https://${SBKApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
